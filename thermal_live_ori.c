@@ -2,20 +2,20 @@
  * thermal_live.c - ATTO640 live viewer: capture -> 14-bit decode -> NUC ->
  *                  bad pixel fix -> AGC -> SDL2 window
  *
- * Own SDL2 window lo display (pipe / ffplay avasaram ledu).
+ * Shows the image in its own SDL2 window instead of using a pipe or ffplay.
  *
  *   ./thermal_live                    (default /dev/video0)
  *   ./thermal_live -d /dev/video1
- *   ./thermal_live -f obs.bin         (saved usb_observe file, loop)
+ *   ./thermal_live -f obs.bin         (saved raw file, loops)
  *
- * Keys (window lo leda terminal lo):
- *   n  = NUC teesuko  (MUNDU lens cap pettandi / uniform object chupinchandi)
- *   r  = NUC reset (off)
- *   s  = snapshot: snap_XX.raw (raw frame) + snap_XX.pgm (display image)
+ * Keys:
+ *   n  = start NUC (cover the lens with a cap or use a uniform object)
+ *   r  = reset NUC (off)
+ *   s  = save snapshot: snap_XX.raw (raw frame) + snap_XX.pgm (display image)
  *   q  = quit
  *
- * Setup : sudo apt install libsdl2-dev
- * Build : gcc -O2 -Wall -o thermal_live thermal_live.c -lm $(sdl2-config --cflags --libs)
+ * Setup: sudo apt install libsdl2-dev
+ * Build: gcc -O2 -Wall -o thermal_live thermal_live.c -lm $(sdl2-config --cflags --libs)
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -63,7 +63,7 @@ static int v4l2_open(const char *dev)
     struct v4l2_format fmt = { .type = V4L2_BUF_TYPE_VIDEO_CAPTURE };
     fmt.fmt.pix.width = W;
     fmt.fmt.pix.height = H;
-    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;   /* "YUYV" label, 14-bit raw lopala */
+    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;   /* "YUYV" label; raw data is stored in 14-bit form */
     fmt.fmt.pix.field = V4L2_FIELD_NONE;
     if (xioctl(vfd, VIDIOC_S_FMT, &fmt) < 0) { perror("S_FMT"); return -1; }
     if (fmt.fmt.pix.width != W || fmt.fmt.pix.height != H) {
@@ -90,7 +90,7 @@ static int v4l2_open(const char *dev)
     return 0;
 }
 
-/* oka frame ivvadam (614400 bytes). NULL = error */
+/* one frame is 614,400 bytes. NULL = error */
 static const uint8_t *get_frame(void)
 {
     if (rawf) {
@@ -114,19 +114,19 @@ static const uint8_t *get_frame(void)
     return buf[cur.index].p;
 }
 
-static void put_frame(void)          /* buffer ni driver ki tirigi ivvadam (fast ga!) */
+static void put_frame(void)          /* return the buffer to the driver as fast as possible */
 {
     if (vfd >= 0) xioctl(vfd, VIDIOC_QBUF, &cur);
 }
 
 /* ---------------- processing state ---------------- */
-static uint16_t img[NPIX];          /* decoded 14-bit */
+static uint16_t img[NPIX];          /* decoded 14-bit data */
 static float    offset[NPIX];       /* NUC offset map */
-static uint8_t  bad[NPIX];          /* 1 = bad pixel  */
-static int32_t  corr[NPIX];         /* corrected      */
+static uint8_t  bad[NPIX];           /* 1 = bad pixel */
+static int32_t  corr[NPIX];          /* corrected values */
 static uint8_t  out8[NPIX];
 static double   acc[NPIX];
-static int nuc_on = 0, nuc_count = -1, nbad = 0;   /* nuc_count >= 0 -> collecting */
+static int nuc_on = 0, nuc_count = -1, nbad = 0;   /* nuc_count >= 0 -> collecting data */
 static float agc_lo = -1, agc_hi = -1;
 
 static void decode(const uint8_t *raw)
@@ -155,9 +155,9 @@ static void nuc_collect(void)
     for (int i = 0; i < NPIX; i++) offset[i] = bad[i] ? 0 : (float)(acc[i] / NAVG - gm);
     nuc_on = 1;
     nuc_count = -1;
-    agc_lo = agc_hi = -1;                       /* AGC range reset */
+    agc_lo = agc_hi = -1;                       /* reset AGC range */
     fprintf(stderr, "\n[NUC done] mean %.0f DL, FPN std %.1f DL, bad pixels %d\n"
-                    "           ippudu lens cap TEESEYANDI\n", gm, sd, nbad);
+                    "           cover the lens cap before using it\n", gm, sd, nbad);
 }
 
 static int cmp_i32(const void *a, const void *b)
@@ -166,7 +166,7 @@ static int cmp_i32(const void *a, const void *b)
     return (x > y) - (x < y);
 }
 
-/* bad pixel = good N8 neighbours median */
+/* bad pixel = median of the good 8 neighbors */
 static void fix_bad(void)
 {
     for (int y = 0; y < H; y++)
@@ -196,7 +196,7 @@ static void correct(void)
     }
 }
 
-/* percentile AGC (1%..99%), frame-to-frame smooth (flicker ledu) */
+/* percentile AGC (1%..99%), smooth between frames to reduce flicker */
 static void agc(void)
 {
     static uint32_t hist[16384];
@@ -209,7 +209,7 @@ static void agc(void)
     int lo = 0, hi = 16383, v;
     for (v = 0; v < 16384; v++) { c += hist[v]; if (c > tlo) { lo = v; break; } }
     for (; v < 16384; v++)      { c += hist[v]; if (c > thi) { hi = v; break; } }
-    if (hi - lo < 16) hi = lo + 16;                     /* chala flat scene lo noise blow-up aapadam */
+    if (hi - lo < 16) hi = lo + 16;                     /* avoid noise blow-up in very flat scenes */
 
     if (agc_lo < 0) { agc_lo = lo; agc_hi = hi; }
     agc_lo += 0.1f * (lo - agc_lo);
@@ -222,7 +222,7 @@ static void agc(void)
     }
 }
 
-/* focus score: center 320x240 lo average |gradient|. Focus perigithe perugutundi */
+/* focus score: average absolute gradient in the center 320x240 area */
 static double focus_score(void)
 {
     double s = 0; long n = 0;
@@ -293,10 +293,10 @@ int main(int argc, char **argv)
     SDL_Texture *tex = ren ? SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888,
                         SDL_TEXTUREACCESS_STREAMING, W, H) : NULL;
     if (!tex) { fprintf(stderr, "SDL window: %s\n", SDL_GetError()); return 1; }
-    SDL_RenderSetLogicalSize(ren, W, H);           /* resize chesina aspect ratio same */
+    SDL_RenderSetLogicalSize(ren, W, H);           /* keep the same aspect ratio when resized */
     static uint32_t argb[NPIX];
 
-    fprintf(stderr, "keys (window lo / terminal lo): n=NUC (lens cap mundu)  r=NUC off  s=snapshot  q/Esc=quit\n");
+    fprintf(stderr, "keys (window / terminal): n=NUC (cover lens)  r=NUC off  s=snapshot  q/Esc=quit\n");
 
     struct timespec t0; clock_gettime(CLOCK_MONOTONIC, &t0);
     long frames = 0;
@@ -319,11 +319,11 @@ int main(int argc, char **argv)
         }
         if (k == 'q') stop = 1;
         else if (k == 'n') { memset(acc, 0, sizeof acc); nuc_count = 0;
-                             fprintf(stderr, "\n[NUC] %d frames collect chestunna... lens cap kadalchakandi\n", NAVG); }
+                             fprintf(stderr, "\n[NUC] %d frames are being collected... keep the lens covered\n", NAVG); }
         else if (k == 'r') { nuc_on = 0; nbad = 0; memset(bad, 0, sizeof bad);
                              agc_lo = agc_hi = -1; fprintf(stderr, "\n[NUC off]\n"); }
         else if (k == 's') { memcpy(rawcopy, raw, FRAMESZ); want_snap = 1; }
-        put_frame();                                   /* buffer tirigi driver ki, processing mundu */
+        put_frame();                                   /* return the buffer to the driver before processing */
 
         if (nuc_count >= 0) nuc_collect();
         correct();
