@@ -3,7 +3,7 @@
  *
  * Input : one raw USB frame, exactly 614400 bytes
  *         (640 x 480 pixels, 2 bytes each, big-endian, value = word >> 2)
- * Output: before.pgm  - simple full-range scaling (ippudu meeru chusina flat grey)
+ * Output: before.pgm  - simple full-range scaling 
  *         after.pgm   - percentile AGC (1% .. 99%)
  *
  * Build : gcc -O2 -Wall -o thermal_agc thermal_agc.c
@@ -18,12 +18,12 @@
 #define NPIX  (W * H)              /* 307200 pixels          */
 #define RAWSZ (NPIX * 2)           /* 614400 bytes per frame */
 
-static uint8_t  raw[RAWSZ];        /* file nunchi vachina bytes        */
-static uint16_t img[NPIX];         /* decode chesina 14-bit values     */
-static uint8_t  out8[NPIX];        /* screen kosam 8-bit values        */
-static uint32_t hist[16384];       /* prathi 14-bit value ki count     */
+static uint8_t  raw[RAWSZ];        /* file bytes       */
+static uint16_t img[NPIX];         /* decoded 14-bit values     */
+static uint8_t  out8[NPIX];        /* screen 8-bit values        */
+static uint32_t hist[16384];       /* 14-bit value ki count     */
 
-/* 8-bit grey image ni PGM file ga save cheyadam */
+/* 8-bit grey image in  PGM file  save  */
 static void save_pgm(const char *name, const uint8_t *pix)
 {
     FILE *f = fopen(name, "wb");
@@ -34,7 +34,7 @@ static void save_pgm(const char *name, const uint8_t *pix)
     printf("  saved %s\n", name);
 }
 
-/* lo..hi range ni 0..255 ki stretch cheyadam (bayata unnavi clip) */
+/* lo..hi range  0..255  stretch  */
 static void stretch(int lo, int hi)
 {
     if (hi <= lo) hi = lo + 1;
@@ -46,7 +46,7 @@ static void stretch(int lo, int hi)
     }
 }
 
-/* histogram lo 'pct' percent pixels daatina value ni kanukkovadam */
+/* histogram  'pct' percent pixels value */
 static int percentile(double pct)
 {
     uint32_t target = (uint32_t)(NPIX * pct / 100.0);
@@ -65,7 +65,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* ---- STEP 1: raw file chadavadam ---- */
+    /* ---- STEP 1: raw file ---- */
     FILE *f = fopen(argv[1], "rb");
     if (!f) { perror(argv[1]); return 1; }
     size_t n = fread(raw, 1, RAWSZ, f);
@@ -88,7 +88,7 @@ int main(int argc, char **argv)
     }
     printf("STEP 2 decode: min=%d  max=%d  mean=%ld DL\n", mn, mx, sum / NPIX);
 
-    /* ---- STEP 3: BEFORE - full 14-bit range ni 0..255 ki ---- */
+    /* ---- STEP 3: BEFORE - full 14-bit range  0..255  ---- */
     printf("STEP 3 before: range 0..16383 -> 0..255\n");
     stretch(0, 16383);
     save_pgm("before.pgm", out8);
