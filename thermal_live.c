@@ -1,18 +1,8 @@
 /*
- * thermal_live.c - ATTO640 live viewer: capture -> 14-bit decode -> NUC ->
- *                  bad pixel fix -> AGC -> SDL2 window
+ * 
  *
- * Own SDL2 window lo display (pipe / ffplay avasaram ledu).
- *
- *   ./thermal_live                    (default /dev/video0)
- *   ./thermal_live -d /dev/video1
- *   ./thermal_live -f obs.bin         (saved usb_observe file, loop)
- *
- * Keys (window lo leda terminal lo):
- *   n  = NUC teesuko  (MUNDU lens cap pettandi / uniform object chupinchandi)
- *   r  = NUC reset (off)
- *   s  = snapshot: snap_XX.raw (raw frame) + snap_XX.pgm (display image)
- *   q  = quit
+ * 
+
  *
  * Setup : sudo apt install libsdl2-dev
  * Build : gcc -O2 -Wall -o thermal_live thermal_live.c -lm $(sdl2-config --cflags --libs)
@@ -63,7 +53,7 @@ static int v4l2_open(const char *dev)
     struct v4l2_format fmt = { .type = V4L2_BUF_TYPE_VIDEO_CAPTURE };
     fmt.fmt.pix.width = W;
     fmt.fmt.pix.height = H;
-    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;   /* "YUYV" label, 14-bit raw lopala */
+    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;   /* "YUYV" label, 14-bit raw */
     fmt.fmt.pix.field = V4L2_FIELD_NONE;
     if (xioctl(vfd, VIDIOC_S_FMT, &fmt) < 0) { perror("S_FMT"); return -1; }
     if (fmt.fmt.pix.width != W || fmt.fmt.pix.height != H) {
@@ -90,7 +80,7 @@ static int v4l2_open(const char *dev)
     return 0;
 }
 
-/* oka frame ivvadam (614400 bytes). NULL = error */
+/*  (614400 bytes). NULL = error */
 static const uint8_t *get_frame(void)
 {
     if (rawf) {
@@ -114,7 +104,7 @@ static const uint8_t *get_frame(void)
     return buf[cur.index].p;
 }
 
-static void put_frame(void)          /* buffer ni driver ki tirigi ivvadam (fast ga!) */
+static void put_frame(void)          /* buf to driver */
 {
     if (vfd >= 0) xioctl(vfd, VIDIOC_QBUF, &cur);
 }
@@ -209,7 +199,7 @@ static void agc(void)
     int lo = 0, hi = 16383, v;
     for (v = 0; v < 16384; v++) { c += hist[v]; if (c > tlo) { lo = v; break; } }
     for (; v < 16384; v++)      { c += hist[v]; if (c > thi) { hi = v; break; } }
-    if (hi - lo < 16) hi = lo + 16;                     /* chala flat scene lo noise blow-up aapadam */
+    if (hi - lo < 16) hi = lo + 16;                     /* to remove blow up*/
 
     if (agc_lo < 0) { agc_lo = lo; agc_hi = hi; }
     agc_lo += 0.1f * (lo - agc_lo);
@@ -222,7 +212,7 @@ static void agc(void)
     }
 }
 
-/* focus score: center 320x240 lo average |gradient|. Focus perigithe perugutundi */
+/* focus score: center 320x240 lo average |gradient|. this increases with focus*/
 static double focus_score(void)
 {
     double s = 0; long n = 0;
@@ -293,7 +283,7 @@ int main(int argc, char **argv)
     SDL_Texture *tex = ren ? SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888,
                         SDL_TEXTUREACCESS_STREAMING, W, H) : NULL;
     if (!tex) { fprintf(stderr, "SDL window: %s\n", SDL_GetError()); return 1; }
-    SDL_RenderSetLogicalSize(ren, W, H);           /* resize chesina aspect ratio same */
+    SDL_RenderSetLogicalSize(ren, W, H);           /* resize  and ratio is same  */
     static uint32_t argb[NPIX];
 
     fprintf(stderr, "keys (window lo / terminal lo): n=NUC (lens cap mundu)  r=NUC off  s=snapshot  q/Esc=quit\n");
@@ -323,7 +313,7 @@ int main(int argc, char **argv)
         else if (k == 'r') { nuc_on = 0; nbad = 0; memset(bad, 0, sizeof bad);
                              agc_lo = agc_hi = -1; fprintf(stderr, "\n[NUC off]\n"); }
         else if (k == 's') { memcpy(rawcopy, raw, FRAMESZ); want_snap = 1; }
-        put_frame();                                   /* buffer tirigi driver ki, processing mundu */
+        put_frame();                                   /* bbuf to driver before processing*/
 
         if (nuc_count >= 0) nuc_collect();
         correct();
