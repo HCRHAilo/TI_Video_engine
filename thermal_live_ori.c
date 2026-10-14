@@ -1,12 +1,5 @@
 /*
- * thermal_live.c - ATTO640 live viewer: capture -> 14-bit decode -> NUC ->
- *                  bad pixel fix -> AGC -> SDL2 window
- *
- * Shows the image in its own SDL2 window instead of using a pipe or ffplay.
- *
- *   ./thermal_live                    (default /dev/video0)
- *   ./thermal_live -d /dev/video1
- *   ./thermal_live -f obs.bin         (saved raw file, loops)
+ 
  *
  * Keys:
  *   n  = start NUC (cover the lens with a cap or use a uniform object)
@@ -14,7 +7,7 @@
  *   s  = save snapshot: snap_XX.raw (raw frame) + snap_XX.pgm (display image)
  *   q  = quit
  *
- * Setup: sudo apt install libsdl2-dev
+ * 
  * Build: gcc -O2 -Wall -o thermal_live thermal_live.c -lm $(sdl2-config --cflags --libs)
  */
 #include <errno.h>
